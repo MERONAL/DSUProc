@@ -2,6 +2,8 @@ import xlrd
 from StopArea import StopArea
 from Station import Station
 from StopPoint import StopPoint
+from Slope import Slope
+from Point import Point
 
 '''根据站名初始化各车站、停车区域、停车点信息'''
 def init_all_info(startStation, endStation):
@@ -33,7 +35,7 @@ def find_stop_area_by_station_name(name):
                 num_stop_area = int(sheet_stop_area.col_values(0)[index + 4])  # 停车区域编号
                 num_stop_point = int(sheet_stop_area.col_values(14)[index + 4])  # 停车点数目
                 # print(sheet.col_values(15)[index + 4])  # 停车点编号
-                link = sheet_stop_area.col_values(3)[index + 4]  # 停车点link
+                link = int(sheet_stop_area.col_values(3)[index + 4])  # 停车点link
                 belong_to_station_id = int(sheet_stop_area.col_values(23)[index + 4])  # 停车点所属车站ID
                 _stop_areas.append(StopArea(num=num_stop_area,
                                           stationName=stationName,
@@ -125,6 +127,8 @@ def find_links_between_two_points(direction, StartPoint, EndPoint):
     start_link = StartPoint.link if direction != 0xaa else EndPoint.link
     end_link = EndPoint.link if direction != 0xaa else StartPoint.link
     links.append(start_link)  # 添加起始link
+    if start_link == end_link:
+        return links
     sheet_link = file.sheet_by_name('Link表')
     total_line_num = int(sheet_link.col_values(5)[1])
     linkNums = list(map(int, sheet_link.col_values(0)[4:total_line_num + 4]))  # 第一列
@@ -136,9 +140,53 @@ def find_links_between_two_points(direction, StartPoint, EndPoint):
     return links
 
 
+def isBetweenTwoPoints(StopPoint, StartPoint, EndPoint):
+    sheet_link = file.sheet_by_name('Link表')
+    total_line_num = int(sheet_link.col_values(5)[1])
+    links = find_links_between_two_points(0x55, StartPoint, EndPoint)
+    for link in links:
+        if link == StartPoint.link and link == StopPoint.link:
+            if StopPoint.offset >= StartPoint.offset:
+                return True
+            else:
+                continue
+        elif link == EndPoint.link and link == StopPoint.link:
+            if StopPoint.offset <= EndPoint.offset:
+                return True
+            else:
+                continue
+        elif link != StartPoint.link and link != StopPoint.link and link == StopPoint.link:
+            return True
+        else:
+            continue
+    return False
+
+
+def find_slope_range(StopPoint):
+    sheet_slope = file.sheet_by_name('坡度表')
+    total_line_num = int(sheet_slope.col_values(5)[1])
+    slopeNums = list(map(int, sheet_slope.col_values(0)[4:total_line_num + 4]))  # 第一列
+    for index, slopeNum in enumerate(slopeNums):
+        if isBetweenTwoPoints(StopPoint,
+                           Point(int(sheet_slope.col_values(1)[index + 4]),
+                                 int(sheet_slope.col_values(2)[index + 4])),
+                           Point(int(sheet_slope.col_values(3)[index + 4]),
+                                 int(sheet_slope.col_values(4)[index + 4]))
+                           ):
+            return Slope(slopeNum=slopeNum,
+                         linkStart=int(sheet_slope.col_values(1)[index + 4]),
+                         offsetStart=int(sheet_slope.col_values(2)[index + 4]),
+                         slopeNumStart=int(sheet_slope.col_values(6)[index + 4]),
+                         linkNumStart=int(sheet_slope.col_values(5)[index + 4]),
+                         linkEnd=int(sheet_slope.col_values(3)[index + 4]),
+                         offsetEnd=int(sheet_slope.col_values(4)[index + 4]),
+                         slopeNumEnd=int(sheet_slope.col_values(9)[index + 4]),
+                         linkNumEnd=int(sheet_slope.col_values(8)[index + 4]),
+                         slopeValue=int(sheet_slope.col_values(11)[index + 4]),
+                         direction=0xaa if sheet_slope.col_values(12)[index + 4] == '0xaa' else 0x55)
 
 if __name__ == "__main__":
-    file = xlrd.open_workbook(r'D:/work/节能项目/节能导则推进/相关资料/成都3号线/电子地图/excel/电子地图数据201808172018_08_17_09_14_282018_08_17_16_17_03.xls')
+    file = xlrd.open_workbook(r'C:/Users/a8047/Desktop/电子地图/excel/电子地图数据201808172018_08_17_09_14_282018_08_17_16_17_03.xls')
     station_dict = {'成都医学院': 1,
                     '石油大学': 2,
                     '钟楼': 3,
@@ -185,6 +233,7 @@ if __name__ == "__main__":
     operation_direction = 0xaa if station_dict[start_station] - station_dict[end_station] < 0 else 0x55
     StartStationStopPoint, EndStationStopPoint = find_start_and_end_point_by_stations(operation_direction, StartStation, EndStation)
     links = find_links_between_two_points(operation_direction, StartStationStopPoint, EndStationStopPoint)
+    StartSlope = find_slope_range(StartStationStopPoint)
     print('start stop point: ' + str(StartStationStopPoint.num))
     print('start link: ' + str(StartStationStopPoint.link))
     print('start offset: ' + str(StartStationStopPoint.offset))
