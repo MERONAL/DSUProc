@@ -4,6 +4,7 @@ from Station import Station
 from StopPoint import StopPoint
 from Slope import Slope
 from Point import Point
+from ChangePoint import ChangePoint
 
 '''根据站名初始化各车站、停车区域、停车点信息'''
 def init_all_info(startStation, endStation):
@@ -116,7 +117,7 @@ def find_start_and_end_point_by_stations(operation_direction, StartStation, EndS
                         break
     return StartStationStopPoint, EndStationStopPoint
 
-def find_start_link(sheetlink, linkNums, start_link):
+def find_next_link(sheetlink, linkNums, start_link):
     for index, link in enumerate(linkNums):
         if link == start_link:
             return int(sheetlink.col_values(9)[index + 4])
@@ -132,10 +133,10 @@ def find_links_between_two_points(direction, StartPoint, EndPoint):
     sheet_link = file.sheet_by_name('Link表')
     total_line_num = int(sheet_link.col_values(5)[1])
     linkNums = list(map(int, sheet_link.col_values(0)[4:total_line_num + 4]))  # 第一列
-    next_link = find_start_link(sheet_link, linkNums, start_link)
+    next_link = find_next_link(sheet_link, linkNums, start_link)
     links.append(next_link)
     while next_link != end_link:
-        next_link = find_start_link(sheet_link, linkNums, next_link)
+        next_link = find_next_link(sheet_link, linkNums, next_link)
         links.append(next_link)
     return links
 
@@ -155,7 +156,7 @@ def isBetweenTwoPoints(StopPoint, StartPoint, EndPoint):
                 return True
             else:
                 continue
-        elif link != StartPoint.link and link != StopPoint.link and link == StopPoint.link:
+        elif link != StartPoint.link and link != EndPoint.link and link == StopPoint.link:
             return True
         else:
             continue
@@ -177,16 +178,119 @@ def find_slope_range(StopPoint):
                          linkStart=int(sheet_slope.col_values(1)[index + 4]),
                          offsetStart=int(sheet_slope.col_values(2)[index + 4]),
                          slopeNumStart=int(sheet_slope.col_values(6)[index + 4]),
-                         linkNumStart=int(sheet_slope.col_values(5)[index + 4]),
                          linkEnd=int(sheet_slope.col_values(3)[index + 4]),
                          offsetEnd=int(sheet_slope.col_values(4)[index + 4]),
                          slopeNumEnd=int(sheet_slope.col_values(9)[index + 4]),
-                         linkNumEnd=int(sheet_slope.col_values(8)[index + 4]),
                          slopeValue=int(sheet_slope.col_values(11)[index + 4]),
                          direction=0xaa if sheet_slope.col_values(12)[index + 4] == '0xaa' else 0x55)
 
+
+def get_slope_by_slope_num(sheet_slope, slopeNums, slope_num):
+    for index, slopeNum in enumerate(slopeNums):
+        if slopeNum == slope_num:
+            return Slope(slopeNum=slopeNum,
+                         linkStart=int(sheet_slope.col_values(1)[index + 4]),
+                         offsetStart=int(sheet_slope.col_values(2)[index + 4]),
+                         slopeNumStart=int(sheet_slope.col_values(6)[index + 4]),
+                         linkEnd=int(sheet_slope.col_values(3)[index + 4]),
+                         offsetEnd=int(sheet_slope.col_values(4)[index + 4]),
+                         slopeNumEnd=int(sheet_slope.col_values(9)[index + 4]),
+                         slopeValue=int(sheet_slope.col_values(11)[index + 4]),
+                         direction=0xaa if sheet_slope.col_values(12)[index + 4] == '0xaa' else 0x55)
+
+def find_slopes_between_two_slopes(direction, StartSlope, EndSlope):
+    # 根据link表设置需要从前往后找
+    slopes = []
+    start_slope = StartSlope if direction != 0xaa else EndSlope
+    # start_slope = StartSlope
+    end_slope = EndSlope if direction != 0xaa else StartSlope
+    # end_slope = EndSlope
+    slopes.append(start_slope)  # 添加起始link
+    if start_slope.slopeNum == end_slope.slopeNum:
+        return slopes
+    sheet_slope = file.sheet_by_name('坡度表')
+    total_line_num = int(sheet_slope.col_values(5)[1])
+    slopeNums = list(map(int, sheet_slope.col_values(0)[4:total_line_num + 4]))  # 第一列
+    next_slope = get_slope_by_slope_num(sheet_slope, slopeNums, start_slope.slopeNumEnd)
+    slopes.append(next_slope)
+    while next_slope.slopeNum != end_slope.slopeNum:
+        next_slope = get_slope_by_slope_num(sheet_slope, slopeNums, next_slope.slopeNumEnd)
+        slopes.append(next_slope)
+    if direction == 0xaa:
+        return list(reversed(slopes))
+    else:
+        return slopes
+
+def find_slope_change_points_between_two_points(StartPoint, EndPoint):
+    change_points = []
+    StartSlope = find_slope_range(StartPoint)
+    EndSlope = find_slope_range(EndPoint)
+    StartPoint.slope = StartSlope.slopeValue
+    StartPoint.slope_direction = StartSlope.direction
+    EndPoint.slope = EndSlope.slopeValue
+    EndPoint.slope_direction = EndSlope.direction
+    slopes = find_slopes_between_two_slopes(operation_direction, StartSlope, EndSlope)
+    change_points.append(StartPoint)
+    for index, slope in enumerate(slopes):
+        if index == 0:
+            if operation_direction == 0xaa:
+                # 第一个坡度起点
+                change_points.append(ChangePoint(link=slope.linkStart,
+                                                 offset=slope.offsetStart,
+                                                 slope_value=slope.slopeValue,
+                                                 slope_direction=slope.direction)
+                                     )
+            else:
+                # 第一个坡度终点
+                change_points.append(ChangePoint(link=slope.linkEnd,
+                                                 offset=slope.offsetEnd,
+                                                 slope_value=slope.slopeValue,
+                                                 slope_direction=slope.direction)
+                                     )
+        if index == len(slopes) - 1:
+            if operation_direction == 0xaa:
+                # 最后一个坡度终点
+                change_points.append(ChangePoint(link=slope.linkEnd,
+                                                 offset=slope.offsetEnd,
+                                                 slope_value=slope.slopeValue,
+                                                 slope_direction=slope.direction)
+                                     )
+            else:
+                # 最后一个坡度起点
+                change_points.append(ChangePoint(link=slope.linkStart,
+                                                 offset=slope.offsetStart,
+                                                 slope_value=slope.slopeValue,
+                                                 slope_direction=slope.direction)
+                                     )
+        else:
+            if operation_direction == 0xaa:
+                change_points.append(ChangePoint(link=slope.linkEnd,
+                                                 offset=slope.offsetEnd,
+                                                 slope_value=slope.slopeValue,
+                                                 slope_direction=slope.direction)
+                                     )
+                change_points.append(ChangePoint(link=slope.linkStart,
+                                                 offset=slope.offsetStart,
+                                                 slope_value=slope.slopeValue,
+                                                 slope_direction=slope.direction)
+                                     )
+            else:
+                change_points.append(ChangePoint(link=slope.linkStart,
+                                                 offset=slope.offsetStart,
+                                                 slope_value=slope.slopeValue,
+                                                 slope_direction=slope.direction)
+                                     )
+                change_points.append(ChangePoint(link=slope.linkEnd,
+                                                 offset=slope.offsetEnd,
+                                                 slope_value=slope.slopeValue,
+                                                 slope_direction=slope.direction)
+                                     )
+    change_points.append(EndPoint)
+    return change_points
+
+
 if __name__ == "__main__":
-    file = xlrd.open_workbook(r'C:/Users/a8047/Desktop/电子地图/excel/电子地图数据201808172018_08_17_09_14_282018_08_17_16_17_03.xls')
+    file = xlrd.open_workbook(r'C:/Users/hp/Desktop/电子地图数据201808172018_08_17_09_14_282018_08_17_16_17_03.xls')
     station_dict = {'成都医学院': 1,
                     '石油大学': 2,
                     '钟楼': 3,
@@ -227,13 +331,18 @@ if __name__ == "__main__":
                     }
 
     start_station = '驷马桥'
-    end_station = '市二医院'
+    end_station = '李家沱'
     StartStation, EndStation = init_all_info(start_station, end_station)
     # 判断上下行
     operation_direction = 0xaa if station_dict[start_station] - station_dict[end_station] < 0 else 0x55
     StartStationStopPoint, EndStationStopPoint = find_start_and_end_point_by_stations(operation_direction, StartStation, EndStation)
     links = find_links_between_two_points(operation_direction, StartStationStopPoint, EndStationStopPoint)
-    StartSlope = find_slope_range(StartStationStopPoint)
+    # StartSlope = find_slope_range(StartStationStopPoint)
+    # EndSlope = find_slope_range(EndStationStopPoint)
+    # slopes = find_slopes_between_two_slopes(operation_direction, StartSlope, EndSlope)
+    change_points = find_slope_change_points_between_two_points(StartStationStopPoint, EndStationStopPoint)
+    # for slope in slopes:
+    #     print(slope.slopeNum)
     print('start stop point: ' + str(StartStationStopPoint.num))
     print('start link: ' + str(StartStationStopPoint.link))
     print('start offset: ' + str(StartStationStopPoint.offset))
