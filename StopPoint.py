@@ -6,5 +6,5 @@ class StopPoint(Point):
         self.direction = direction  # 停车点作用方向
         # self.link = link
         # self.offset = offset
-        self.lineNum = lineNum
+        self.lineNum = lineNum  # 位于表中第几行
         self.isStart = False

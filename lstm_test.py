@@ -1,30 +1,15 @@
-# coding: utf-8
-
-# In[3]:
-
-
 from pandas import read_csv
-from datetime import datetime
-from keras import backend as K
-import tensorflow as tf
+from pandas import DataFrame
+from pandas import concat
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import mean_squared_error
+import pickle
+from numpy import concatenate
+import numpy as np
+from math import sqrt
+import matplotlib.pyplot as plt
 
-
-K.set_session(tf.Session(config=tf.ConfigProto(device_count={'CPU': 1, 'GPU': 0})))
-
-# load data
-dataset = read_csv('C:/Users/a8047/Desktop/lstm_dynamic/ATO_CD3.csv', header=0, index_col=0, squeeze=True, error_bad_lines=False)
-# manually specify column names
-dataset.columns = ['analog_output', 'slope', 'traction_brake', 'speed']
-dataset.index.name = 'seq_no'
-# summarize first 5 rows
-print(dataset.head(5))
-# save to file
-dataset.to_csv('C:/Users/a8047/Desktop/lstm_dynamic/tailored.csv')
-
-# In[4]:
-
-
-from matplotlib import pyplot
 
 # load dataset
 dataset = read_csv('C:/Users/a8047/Desktop/lstm_dynamic/tailored.csv', header=0, index_col=0)
@@ -70,15 +55,6 @@ def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
     return agg
 
 
-# In[6]:
-
-
-from pandas import DataFrame
-from pandas import concat
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import mean_squared_error
-
 # load dataset
 dataset = read_csv('C:/Users/a8047/Desktop/lstm_dynamic/tailored.csv', header=0, index_col=0)
 values = dataset.values
@@ -119,35 +95,22 @@ train_X = train_X.reshape((train_X.shape[0], 1, train_X.shape[1]))
 test_X = test_X.reshape((test_X.shape[0], 1, test_X.shape[1]))
 print(train_X.shape, train_y.shape, test_X.shape, test_y.shape)
 
-# In[8]:
+f = open('model1.pkl', 'rb')
+lstm_from_pickle = pickle.load(f)
+f.close()
 
-
-from keras.models import Sequential
-from keras.layers import Dense
-from keras.layers import LSTM
-
-# design network
-model = Sequential()
-model.add(LSTM(50, input_shape=(train_X.shape[1], train_X.shape[2])))
-model.add(Dense(1))
-model.compile(loss='mae', optimizer='adam')
-# fit network
-history = model.fit(train_X, train_y, epochs=70, batch_size=128, validation_data=(test_X, test_y), verbose=2,
-                    shuffle=False)
-# plot history
-# pyplot.plot(history.history['loss'], label='train')
-# pyplot.plot(history.history['val_loss'], label='test')
-# pyplot.legend()
-# pyplot.show()
-
-# In[10]:
-
-
-from numpy import concatenate
-from math import sqrt
 
 # make a prediction
-yhat = model.predict(test_X)
+my_test = np.array([25, -22, 2, 1222],dtype=float)
+my_test[0] = (my_test[0] - 25) / 149
+my_test[1] = (my_test[1] + 37) / 72
+my_test[2] = my_test[2] / 3
+my_test[3] = my_test[3] / 2230
+my_test = my_test.reshape(1,1,4)
+yhat_test = lstm_from_pickle.predict(my_test)
+
+
+yhat = lstm_from_pickle.predict(test_X)
 test_X = test_X.reshape((test_X.shape[0], test_X.shape[2]))
 # invert scaling for forecast
 inv_yhat = concatenate((yhat, test_X[:, 1:]), axis=1)
@@ -162,31 +125,7 @@ inv_y = inv_y[:, 0]
 rmse = sqrt(mean_squared_error(inv_y, inv_yhat))
 print('Test RMSE: %.3f' % rmse)
 
-# In[11]:
-
-
-import matplotlib.pyplot as plt
-
-# plt.plot(inv_y)
-# plt.plot(inv_yhat)
-# plt.show()
-
-# In[12]:
-
-
-import pickle
-
-# In[13]:
-
-
-# Save the trained model as a pickle string.
-f=open('model1.pkl', 'wb')
-pickle.dump(model, f, 0)
-f.close()
-
-# Load the pickled model
-#lstm_from_pickle = pickle.loads(saved_model)
-
-# Use the loaded pickled model to make predictions
-# lstm_from_pickle.predict(test_X)
-
+# plot history
+plt.plot(inv_y)
+plt.plot(inv_yhat)
+plt.show()
