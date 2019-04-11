@@ -5,4 +5,6 @@
 
 返回：按照坡度和限速划分的起点到至终点的距离、坡度、限速数据
 
-交控科技股份有限公司研究院 All Rights Reserved
+交控科技股份有限公司研究院 
+
+All Rights Reserved
